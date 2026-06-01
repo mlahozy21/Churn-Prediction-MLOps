@@ -21,12 +21,46 @@ The dataset loader works with the real IBM Telco Customer Churn CSV if provided,
 otherwise **generates a synthetic dataset with the same schema and a realistic churn
 signal**, so the whole project is runnable out of the box.
 
-## Results (synthetic data, reproducible)
+## Results (real IBM Telco Customer Churn dataset)
 
-5-fold CV AUC ≈ **0.73**, test AUC ≈ **0.73** — consistent with what this feature set
-achieves on the real Telco dataset. The strongest churn drivers in the data are
-month-to-month contracts, short tenure, high monthly charges, fiber-optic internet and
-electronic-check payment.
+Trained on the real IBM Telco Customer Churn dataset (7,043 customers, 26.5% churn):
+
+| Metric | Value |
+|--------|------:|
+| 5-fold CV AUC | **0.832 ± 0.013** |
+| Test AUC | **0.823** |
+| Test F1 | 0.555 |
+| Test accuracy | 0.777 |
+
+(The project also ships a synthetic generator with the same schema, so it runs
+out of the box without the CSV; on synthetic data the AUC is ≈ 0.73.)
+
+### What drives churn (explainability)
+
+Permutation feature importance (mean drop in test ROC AUC when each feature is
+shuffled) identifies the contract type as by far the strongest churn driver,
+followed by tenure and charges — consistent with the churn literature:
+
+![Feature importance](figures/feature_importance.png)
+
+| Feature | Importance |
+|---------|-----------:|
+| Contract | 0.113 |
+| tenure | 0.044 |
+| MonthlyCharges | 0.019 |
+| TotalCharges | 0.015 |
+| InternetService | 0.013 |
+
+Reproduce with `python scripts/explain.py --csv data/Telco-Customer-Churn.csv`.
+
+## Data
+
+The project works with the **IBM Telco Customer Churn** dataset. Download
+`Telco-Customer-Churn.csv` (e.g. from the
+[IBM sample repo](https://github.com/IBM/telco-customer-churn-on-icp4d) or Kaggle)
+into `data/` and pass `--csv data/Telco-Customer-Churn.csv`. If no CSV is given, a
+**synthetic dataset with the same schema** is generated automatically, so everything
+runs without any download.
 
 ## Quick start
 
@@ -69,7 +103,8 @@ curl -X POST localhost:8000/predict -H "Content-Type: application/json" -d '{
 │   ├── data.py       # real-CSV loader + synthetic Telco-schema generator
 │   ├── pipeline.py   # preprocessing + HistGradientBoosting pipeline
 │   ├── train.py      # train, cross-validate, MLflow logging, save model
-│   └── api.py        # FastAPI service (/predict, /health)
+│   ├── api.py        # FastAPI service (/predict, /health)
+│   └── explain.py    # permutation feature importance + plot
 ├── tests/            # pytest: data, pipeline and API
 ├── Dockerfile
 ├── .github/workflows/ci.yml   # GitHub Actions (tests on push)
