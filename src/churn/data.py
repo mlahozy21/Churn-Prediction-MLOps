@@ -53,8 +53,30 @@ def make_synthetic(n: int = 5000, seed: int = 42) -> pd.DataFrame:
                                "Bank transfer (automatic)", "Credit card (automatic)"]),
         "MonthlyCharges": monthly,
     })
-    df["TotalCharges"] = np.round(df["tenure"] * df["MonthlyCharges"]
-                                  * rng.uniform(0.9, 1.05, n), 2)
+
+    # TotalCharges is *roughly* tenure * monthly, but in the real Telco data it
+    # is not a deterministic function of the two: plans change, there are
+    # promotions/credits and one-off fees, and a handful of brand-new customers
+    # have a blank/NaN value. We mirror that with (a) a multiplicative
+    # billing-variation factor, (b) additive month-to-month noise that grows with
+    # tenure, and (c) an occasional one-off fee. This keeps TotalCharges
+    # correlated with -- but not a near-identity of -- tenure and MonthlyCharges,
+    # so permutation importance is not measuring an artifact.
+    tenure_arr = df["tenure"].to_numpy()
+    monthly_arr = df["MonthlyCharges"].to_numpy()
+    billing_var = rng.uniform(0.9, 1.05, n)
+    additive_noise = (rng.normal(0.0, 1.0, n) * monthly_arr
+                      * np.sqrt(np.maximum(tenure_arr, 1)) * 0.15)
+    one_off_fee = rng.gamma(1.5, 12.0, n) * (rng.uniform(size=n) < 0.5)
+    total = tenure_arr * monthly_arr * billing_var + additive_noise + one_off_fee
+    total = np.round(np.clip(total, 0.0, None), 2).astype(float)
+    # Brand-new customers (tenure == 0) have not been billed yet, so in the real
+    # IBM Telco CSV their TotalCharges cell is blank -> NaN. We reproduce that
+    # exactly (plus a tiny fraction of other blanks). The pipeline's median
+    # imputer handles these missing values.
+    missing = (tenure_arr == 0) | (rng.uniform(size=n) < 0.002)
+    total[missing] = np.nan
+    df["TotalCharges"] = total
 
     # churn log-odds: month-to-month, short tenure, high charges, fiber, e-check increase risk
     z = (-1.0
